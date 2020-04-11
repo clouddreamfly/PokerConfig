@@ -19,6 +19,7 @@ class BaseConfig:
         self.poker_banker_seat_id = 0
         self.poker_test_count = 0
         self.poker_total_count = 0
+        self.poker_pair_count = 1
         self.poker_everyone_count = 14
         self.back_poker_datas = []
         self.player_poker_datas = []
@@ -57,8 +58,11 @@ class BaseConfig:
                 self.poker_test_count = config.getint("Options", "test_count")
             
             if config.has_option("Options", "total_count"):
-                self.poker_total_count = config.getint("Options", "total_count")                
-  
+                self.poker_total_count = config.getint("Options", "total_count")   
+                
+            if config.has_option("Options", "pair_count"):
+                self.poker_pair_count = config.getint("Options", "pair_count")               
+            
             if config.has_option("Options", "everyone_count"):
                 self.poker_everyone_count = config.getint("Options", "everyone_count")             
         
@@ -103,6 +107,7 @@ class BaseConfig:
         config.set("Options", "banker_seat_id", self.poker_banker_seat_id)
         config.set("Options", "test_count", self.poker_test_count)
         config.set("Options", "total_count", self.poker_total_count)
+        config.set("Options", "pair_count", self.poker_pair_count)
         config.set("Options", "everyone_count", self.poker_everyone_count)         
         
         back_poker_datas = []
@@ -176,6 +181,9 @@ class PokerConfig(BaseConfig):
                 if config["Options"].has_key("total_count"):
                     self.poker_total_count = config["Options"]["total_count"]
                     
+                if config["Options"].has_key("pair_count"):
+                    self.poker_pair_count = config["Options"]["pair_count"]                
+                    
                 if config["Options"].has_key("everyone_count"):
                     self.poker_everyone_count = config["Options"]["everyone_count"]                        
                 
@@ -230,6 +238,7 @@ class PokerConfig(BaseConfig):
                 "banker_seat_id" : self.poker_banker_seat_id,
                 "test_count" : self.poker_test_count,
                 "total_count" : self.poker_total_count,
+                "pair_count" : self.poker_pair_count,
                 "everyone_count": self.poker_everyone_count
             }, 
             "PokerDatas" : {
@@ -720,20 +729,18 @@ class HandPoker:
     def SetSeatID(self,  seat_id):
         
         self.seat_id =  seat_id
+     
     
     def SetHandPokers(self, poker_datas):
         
+        if type(poker_datas) == type([]) and len(poker_datas) > 1:
+            poker_datas.sort(reverse=True)
+        
         poker_count =  len(poker_datas)
-        if poker_count > 0:
-            reverse_poker_datas = []
-            if self.seat_direction == SeatDirection_Top or self.seat_direction ==  SeatDirection_Right:
-                for poker_data in reversed(poker_datas):
-                    reverse_poker_datas.append(poker_data)
-                
+        if poker_count > 0:                
             for index in range(poker_count):
                 poker_data = poker_datas[index]
-                if len(reverse_poker_datas) > 0:
-                    poker_data = reverse_poker_datas[index]
+   
                 if index < len(self.poker_views):
                     self.poker_views[index].SetPokerData(poker_data)
                 else:
@@ -772,8 +779,8 @@ class HandPoker:
             data = poker_view.GetPokerData()
             poker_datas.append(data)
         
-        if self.seat_direction == SeatDirection_Top or self.seat_direction ==  SeatDirection_Right:
-            poker_datas.reverse()
+        if len(poker_datas) > 1:
+            random.shuffle(poker_datas)
             
         return poker_datas
     
@@ -788,18 +795,15 @@ class HandPoker:
     
     def InitPokerView(self, poker_datas):
         
+        if type(poker_datas) == type([]) and len(poker_datas) > 1:
+            poker_datas.sort(reverse=True)
+            
         if self.seat_direction == SeatDirection_Left:
             self.InitLeftPokerView(poker_datas)
-        elif self.seat_direction == SeatDirection_Top:
-            reverse_poker_datas = []
-            for poker_data in reversed(poker_datas):
-                reverse_poker_datas.append(poker_data)          
-            self.InitTopPokerView(reverse_poker_datas)
+        elif self.seat_direction == SeatDirection_Top:        
+            self.InitTopPokerView(poker_datas)
         elif self.seat_direction == SeatDirection_Right:
-            reverse_poker_datas = []
-            for poker_data in reversed(poker_datas):
-                reverse_poker_datas.append(poker_data)
-            self.InitRightPokerView(reverse_poker_datas)
+            self.InitRightPokerView(poker_datas)
         else:
             self.InitBottomPokerView(poker_datas)
             
@@ -884,7 +888,9 @@ class HandPoker:
         if self.layout_mode &  wx.ALIGN_CENTER_VERTICAL:
             y -= self.view_rect.GetHeight() / 2 
             
-        v_space = 0
+        poker_count = len(self.poker_views)
+        v_space = (-2 * (poker_count - 16)) if poker_count > 16 else 0
+        v_space = v_space if v_space > -6 else -6
         count = 0
         view_rect =  wx.Rect()
         for poker_view in self.poker_views:
@@ -919,7 +925,9 @@ class HandPoker:
         if self.layout_mode &  wx.ALIGN_CENTER_VERTICAL:
             y -= self.view_rect.GetHeight() / 2   
             
-        v_space = 0
+        poker_count = len(self.poker_views)
+        v_space = (-2 * (poker_count - 16)) if poker_count > 16 else 0
+        v_space = v_space if v_space > -6 else -6
         count = 0
         view_rect =  wx.Rect()
         for poker_view in self.poker_views:
@@ -938,7 +946,7 @@ class HandPoker:
         
         poker_count = len(self.poker_views)
         h_space = (-2 * (poker_count - 16)) if poker_count > 16 else 0
-        h_space = h_space if h_space > -20 else 20
+        h_space = h_space if h_space > -20 else -20
         count = 0
         view_rect =  wx.Rect()
         for poker_view in self.poker_views:
@@ -1135,7 +1143,11 @@ class DragCanvas(wx.Panel):
         client_size = self.GetClientSize()
         center_point_x = client_size.GetWidth() / 2
         center_point_y = client_size.GetHeight() / 2 - 10
-        self.plane_heap_poker.SetPosition(wx.Point(center_point_x, center_point_y), wx.ALIGN_CENTER)   
+        if self.parent.config.poker_player_count % 2 == 0:
+            heap_center_point_y = center_point_y
+        else:
+            heap_center_point_y = client_size.GetHeight() / 2 - 160
+        self.plane_heap_poker.SetPosition(wx.Point(center_point_x, heap_center_point_y), wx.ALIGN_CENTER)   
         
         for poker_view in self.hand_poker_ctrls:
             if poker_view.seat_direction == SeatDirection_Left:
@@ -1336,7 +1348,7 @@ class PokerSettingDlg(wx.Dialog):
         
         label_poker_total_count = wx.StaticText(static_box, label = u"扑克总数目：")
         self.spin_poker_total_count = wx.SpinCtrl(static_box, value='54', size=(50,-1))    
-        self.spin_poker_total_count.SetRange(0, 55)
+        self.spin_poker_total_count.SetRange(0, 55 * 6)
         self.spin_poker_total_count.SetValue(54)
         self.spin_poker_total_count.Disable()
         static_box_sizer.Add(label_poker_total_count, 0, wx.LEFT|wx.ALIGN_CENTER_VERTICAL, 4)
@@ -1360,7 +1372,7 @@ class PokerSettingDlg(wx.Dialog):
         static_box_sizer.AddSpacer(8)
         
         label_poker_everyone_count = wx.StaticText(static_box, label = u"每人牌数：")
-        self.choice_poker_everyone_count = wx.Choice(static_box, size=(40,-1), choices= ['14', '17', '20'])    
+        self.choice_poker_everyone_count = wx.Choice(static_box, size=(40,-1), choices= ['14', '15', '16', '17', '18', '19', '20'])    
         self.choice_poker_everyone_count.Select(0)
         static_box_sizer.Add(label_poker_everyone_count, 0, wx.LEFT|wx.ALIGN_CENTER_VERTICAL, 4)
         static_box_sizer.Add(self.choice_poker_everyone_count, 0, wx.ALIGN_CENTER_VERTICAL)
@@ -1540,6 +1552,9 @@ class PokerSettingDlg(wx.Dialog):
         self.Bind(wx.EVT_SPINCTRL, self.OnSelectedSpinPokerTotalCount, self.spin_poker_total_count)
         self.Bind(wx.EVT_TEXT, self.OnChangeSpinPokerTotalCount, self.spin_poker_total_count) 
         
+        self.Bind(wx.EVT_SPINCTRL, self.OnSelectedSpinPokerPairCount, self.spin_poker_pair_count)
+        self.Bind(wx.EVT_TEXT, self.OnChangeSpinPokerPairCount, self.spin_poker_pair_count)         
+        
         self.Bind(wx.EVT_SPINCTRL, self.OnSelectedSpinValue, self.spin_poker_player_count)
         self.Bind(wx.EVT_TEXT, self.OnChangeSpinValue, self.spin_poker_player_count)        
         self.Bind(wx.EVT_SPINCTRL, self.OnSelectedSpinValue, self.spin_poker_banker_seat_id)
@@ -1605,7 +1620,7 @@ class PokerSettingDlg(wx.Dialog):
         
         select_index = 0
         select_values = []        
-        chioce_values = [14, 17, 20] if self.parent.config.poker_player_count < 4 else [14, 17]
+        chioce_values = [i for i in range(14, 109)]
         if self.parent.config.poker_everyone_count not in chioce_values:
             self.parent.config.poker_everyone_count = chioce_values[0]
             
@@ -1615,6 +1630,9 @@ class PokerSettingDlg(wx.Dialog):
                 select_index = index
         self.choice_poker_everyone_count.SetItems(select_values)
         self.choice_poker_everyone_count.Select(select_index)
+        
+        self.spin_poker_pair_count.SetValue(self.parent.config.poker_pair_count if self.parent.config.poker_pair_count != 0 else 1)
+        self.parent.config.poker_pair_count = self.spin_poker_pair_count.GetValue()
         
         poker_datas = []
         for poker_data in self.parent.config.back_poker_datas:
@@ -1719,6 +1737,7 @@ class PokerSettingDlg(wx.Dialog):
     
     def UpdatePokerTotalCount(self):
         
+        poker_pair_count = self.spin_poker_pair_count.GetValue()
         poker_total_count = 0
         poker_diamond_count = 0
         poker_club_count = 0
@@ -1728,30 +1747,41 @@ class PokerSettingDlg(wx.Dialog):
         poker_magic_count = 0
         
         for poker_ctrl in self.poker_diamond_list:
+            poker_count = poker_ctrl["poker_count"].GetValue()
+            if poker_count > poker_pair_count: poker_ctrl["poker_count"].SetValue(poker_pair_count)
             poker_diamond_count += poker_ctrl["poker_count"].GetValue()
             poker_total_count += poker_ctrl["poker_count"].GetValue()
             
         for poker_ctrl in self.poker_club_list:
+            poker_count = poker_ctrl["poker_count"].GetValue()
+            if poker_count > poker_pair_count: poker_ctrl["poker_count"].SetValue(poker_pair_count)            
             poker_club_count += poker_ctrl["poker_count"].GetValue()
             poker_total_count += poker_ctrl["poker_count"].GetValue()        
             
         for poker_ctrl in self.poker_heart_list:
+            poker_count = poker_ctrl["poker_count"].GetValue()
+            if poker_count > poker_pair_count: poker_ctrl["poker_count"].SetValue(poker_pair_count)            
             poker_heart_count += poker_ctrl["poker_count"].GetValue()
             poker_total_count += poker_ctrl["poker_count"].GetValue()
             
         for poker_ctrl in self.poker_spade_list:
+            poker_count = poker_ctrl["poker_count"].GetValue()
+            if poker_count > poker_pair_count: poker_ctrl["poker_count"].SetValue(poker_pair_count)            
             poker_spade_count += poker_ctrl["poker_count"].GetValue()
             poker_total_count += poker_ctrl["poker_count"].GetValue()     
             
         for poker_ctrl in self.poker_king_list:
+            poker_count = poker_ctrl["poker_count"].GetValue()
+            if poker_count > poker_pair_count: poker_ctrl["poker_count"].SetValue(poker_pair_count)            
             poker_king_count += poker_ctrl["poker_count"].GetValue()
             poker_total_count += poker_ctrl["poker_count"].GetValue()
             
         for poker_ctrl in self.poker_magic_list:
+            poker_count = poker_ctrl["poker_count"].GetValue()
+            if poker_count > poker_pair_count: poker_ctrl["poker_count"].SetValue(poker_pair_count)            
             poker_magic_count += poker_ctrl["poker_count"].GetValue()
             poker_total_count += poker_ctrl["poker_count"].GetValue()  
             
-        poker_pair_count = self.spin_poker_pair_count.GetValue()
         self.check_all_poker_diamond.Set3StateValue(wx.CHK_UNCHECKED if poker_diamond_count == 0 else (wx.CHK_CHECKED if poker_diamond_count == 13 * poker_pair_count else wx.CHK_UNDETERMINED))
         self.check_all_poker_club.Set3StateValue(wx.CHK_UNCHECKED if poker_club_count == 0 else (wx.CHK_CHECKED if poker_club_count == 13 * poker_pair_count else wx.CHK_UNDETERMINED))
         self.check_all_poker_heart.Set3StateValue(wx.CHK_UNCHECKED if poker_heart_count == 0 else (wx.CHK_CHECKED if poker_heart_count == 13 * poker_pair_count else wx.CHK_UNDETERMINED))
@@ -1761,6 +1791,7 @@ class PokerSettingDlg(wx.Dialog):
                
         self.spin_poker_total_count.SetValue(poker_total_count)
         self.parent.config.poker_total_count = poker_total_count
+        
         
     def OnClose(self, evt):
         
@@ -1839,6 +1870,23 @@ class PokerSettingDlg(wx.Dialog):
             if self.FindPokerSpinCtrl(spin):
                 self.UpdatePokerTotalCount()  
                 
+    def OnSelectedSpinPokerPairCount(self, evt):
+        
+        spin = evt.GetEventObject()
+    
+        if spin is self.spin_poker_pair_count:
+            self.parent.config.poker_pair_count = spin.GetValue()
+            self.UpdatePokerTotalCount()
+            
+            
+    def OnChangeSpinPokerPairCount(self, evt):
+        
+        spin = evt.GetEventObject()
+
+        if spin is self.spin_poker_pair_count:
+            self.parent.config.poker_pair_count = spin.GetValue()    
+            self.UpdatePokerTotalCount()
+                
     def OnSelectedSpinValue(self, evt):
         
         spin = evt.GetEventObject()
@@ -1852,7 +1900,7 @@ class PokerSettingDlg(wx.Dialog):
                     
                 select_index = 0
                 select_values = []        
-                chioce_values = [14, 17, 20] if self.parent.config.poker_player_count < 4 else [14, 17]
+                chioce_values = [i for i in range(14, 109)]
                 if self.parent.config.poker_everyone_count not in chioce_values:
                     self.parent.config.poker_everyone_count = chioce_values[0]
                     
@@ -1927,7 +1975,7 @@ class PokerMainFrame(wx.Frame):
         if self.config.Read("PokerConfig.ini") == False:
             self.config.ReadJson("PokerConfig.json")
         
-        chioce_values = [14, 17, 20] if self.config.poker_player_count < 4 else [14, 17]
+        chioce_values = [i for i in range(14, 109)]
         if self.config.poker_everyone_count not in chioce_values:
             self.config.poker_everyone_count = chioce_values[0]        
         global NORMAL_POKER_COUNT
